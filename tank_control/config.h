@@ -9,8 +9,10 @@
 |	2017-03-11: Initial commit 												                          |
 \* ------------------------------------------------------------------------- */
 
-#define X_AXIS_SPR	2000
-#define Y_AXIS_SPR  2000	
+#include "stp_drv_6575.h"
+
+#define X_AXIS_SPR	STEP_PREV_5000
+#define Y_AXIS_SPR  STEP_PREV_5000	
 
 // Time belt drive pully circumference (mm)
 #define PULLY_CIRC 	  	89.5
@@ -24,11 +26,17 @@
 // Max delay time for stepper speeds, microseconds (~0.5mm/s @ 2000 stp/rev)
 #define MAX_STEP_DELAY	90000
 
-// Define min/max feedrates
-#define MAX_FEEDRATE	1000000.0/MIN_STEP_DELAY
-#define MIN_FEEDRATE	1000000.0/MAX_STEP_DELAY
+// Define min/max steprates
+#define MAX_STEPRATE	1000000.0/MIN_STEP_DELAY
+#define MIN_STEPRATE	1000000.0/MAX_STEP_DELAY
 
-#define BAUD 			57600
+// Deifine min/max feedrates (mm/s)
+#define MAX_FEEDRATE MAX_STEPRATE*MM_PER_STEP
+#define MIN_FEEDRATE MIN_STEPRATE*MM_PER_STEP
+
+#define BAUD 			115200
 #define MAX_BUF			64
+
+#define MM_PER_SEGMENT 1
 
 #endif

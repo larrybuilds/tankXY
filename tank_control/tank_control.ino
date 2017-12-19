@@ -18,6 +18,7 @@
 
 #include "stp_drv_6575.h"
 #include "config.h"
+#include "pinout.h"
 #include <stdint.h>
 
 //------------------------------------------------------------------------------
@@ -58,14 +59,10 @@ void pause(long ms) {
  * @input nfr the new speed in steps/second
  */
 void feedrate(float nfr) {
+  nfr = nfr/PULLY_CIRC*X_AXIS_SPR;
   if(fr==nfr) return;  // same as last time?  quit now.
 
-  if(nfr>MAX_FEEDRATE || nfr<MIN_FEEDRATE) {  // don't allow crazy feed rates
-    Serial.print(F("New feedrate must be greater than "));
-    Serial.print(MIN_FEEDRATE);
-    Serial.print(F("steps/s and less than "));
-    Serial.print(MAX_FEEDRATE);
-    Serial.println(F("steps/s."));
+  if(nfr>MAX_STEPRATE || nfr<MIN_STEPRATE) {  // don't allow crazy feed rates
     return;
   }
   step_delay = 1000000.0/nfr;
@@ -90,43 +87,72 @@ void position(float npx,float npy) {
  * @input newx the destination x position
  * @input newy the destination y position
  **/
-void line(float newx,float newy) {
+void line(float newx,float newy) {  
   long i;
   long over= 0;
+
+//  Serial.print("Newx:");
+//  Serial.print(newx);
+//  Serial.print(" Newy");
+//  Serial.println(newy);
+
+ 
   
+  newx = newx/PULLY_CIRC*X_AXIS_SPR;
+  newy = newy/PULLY_CIRC*X_AXIS_SPR;
+  
+  
+//  Serial.print("Newx:");
+//  Serial.print(newx);
+//  Serial.print(" Newy");
+//  Serial.println(newy);
   long dx  = newx-px;
   long dy  = newy-py;
-  int dirx = dx>0?1:-1;
-  int diry = dy>0?-1:1;  // because the motors are mounted in opposite directions
+  int dirx = dx>0?CCW:CW;
+  int diry = dy>0?CCW:CW;  // because the motors are mounted in opposite directions
+//  Serial.print("Dirx:");
+//  Serial.print(dirx);
+//  Serial.print(" Diry:");
+//  Serial.print(diry);
+//  Serial.print(" Dx:");
+//  Serial.print(dx);
+//  Serial.print(" Dy:");
+//  Serial.println(dy);
+  
   dx = abs(dx);
   dy = abs(dy);
-
+  
+  xMotor.setDir(dirx);
+  yMotor.setDir(diry);
+  
   if(dx>dy) {
     over = dx/2;
+//    Serial.println("dx>dy");
     for(i=0; i<dx; ++i) {
-      m1step(dirx);
+      xMotor.step(1);
       over += dy;
       if(over>=dx) {
         over -= dx;
-        m2step(diry);
+        yMotor.step(1);
       }
       pause(step_delay);
     }
   } else {
+//    Serial.println("dx<dy");
     over = dy/2;
     for(i=0; i<dy; ++i) {
-      m2step(diry);
+      yMotor.step(1);
       over += dx;
       if(over >= dy) {
         over -= dy;
-        m1step(dirx);
+        xMotor.step(1);
       }
       pause(step_delay);
     }
   }
-
-  px = newx;
-  py = newy;
+   px = newx;
+   py = newy;
+  
 }
 
 
@@ -146,10 +172,23 @@ float atan3(float dy,float dx) {
 // dir - ARC_CW or ARC_CCW to control direction of arc
 void arc(float cx,float cy,float x,float y,float dir) {
   // get radius
-  float dx = px - cx;
-  float dy = py - cy;
+  float dx = (px*PULLY_CIRC/X_AXIS_SPR) - cx;
+  float dy = (py*PULLY_CIRC/X_AXIS_SPR) - cy;
   float radius=sqrt(dx*dx+dy*dy);
-
+  
+//  Serial.print("dx = ");
+//  Serial.print(dx);
+//  Serial.print("    dy = ");
+//  Serial.print(dy);
+//  Serial.print("    px = ");
+//  Serial.print(px);
+//  Serial.print("    py = ");
+//  Serial.print(py);
+//  Serial.print("    cx = ");
+//  Serial.print(cx);
+//  Serial.print("    cy = ");
+//  Serial.println(cy);
+  
   // find angle of arc (sweep)
   float angle1=atan3(dy,dx);
   float angle2=atan3(y-cy,x-cx);
@@ -180,8 +219,6 @@ void arc(float cx,float cy,float x,float y,float dir) {
     // send it to the planner
     line(nx,ny);
   }
-  
-  line(x,y);
 }
 
 
@@ -192,14 +229,14 @@ void arc(float cx,float cy,float x,float y,float dir) {
  * @input val the return value if /code/ is not found.
  **/
 float parsenumber(char code,float val) {
-  char *ptr=buffer;
-  while(ptr>1 && *ptr && ptr<buffer+sofar) {
-    if(*ptr==code) {
-      return atof(ptr+1);
+  char *ptr=buffer;  // start at the beginning of buffer
+  while((long)ptr > 1 && (*ptr) && (long)ptr < (long)buffer+sofar) {  // walk to the end
+    if(*ptr==code) {  // if you find code on your walk,
+      return atof(ptr+1);  // convert the digits that follow into a float and return it
     }
-    ptr=strchr(ptr,' ');
+    ptr=strchr(ptr,' ')+1;  // take a step from here to the letter after the next space
   }
-  return val;
+  return val;  // end reached, nothing found, return default val.
 } 
 
 
@@ -224,26 +261,60 @@ void where() {
   Serial.println(mode_abs?"ABS":"REL");
 } 
 
+void runArc() {
+  // Set feedrate to 10mm/s
+  feedrate(30);
+  // Run 0.9m diameter, 180deg arc clockwise
+  arc(450,0,900,0,1);
+  delay(500);
+  // Run 0.9m diameter, 180deg arc counter-clockwise
+  arc(450,0,0,0,-1);
+}
+
+void raster() {
+  delay(2000);
+  // Set feedrate to 10mm/s
+  feedrate(10);
+  // Move 0.9m towards the desk
+  line(900,0);
+  // Move back to origin
+  line(0,0);
+}
+
 
 /**
  * display helpful information
  */
 void help() {
-  Serial.print(F("GcodeCNCDemo2AxisV1 "));
-  Serial.println(VERSION);
+  Serial.print(F("Small Tank XY-Stage Control"));
   Serial.println(F("Commands:"));
-  Serial.println(F("G00 [X(steps)] [Y(steps)] [F(feedrate)]; - line"));
-  Serial.println(F("G01 [X(steps)] [Y(steps)] [F(feedrate)]; - line"));
-  Serial.println(F("G02 [X(steps)] [Y(steps)] [I(steps)] [J(steps)] [F(feedrate)]; - clockwise arc"));
-  Serial.println(F("G03 [X(steps)] [Y(steps)] [I(steps)] [J(steps)] [F(feedrate)]; - counter-clockwise arc"));
+  Serial.println(F("G00 [X(mm)] [Y(mm)] [F(mm/s)]; - line"));
+  Serial.println(F("G01 [X(mm)] [Y(mm)] [F(mm/s)]; - line"));
+  Serial.println(F("G02 [X(mm)] [Y(mm)] [I(mm)] [J(mm)] [F(mm/s)]; - clockwise arc"));
+  Serial.println(F("G03 [X(mm)] [Y(mm)] [I(mm)] [J(mm)] [F(mm/s)]; - counter-clockwise arc"));
   Serial.println(F("G04 P[seconds]; - delay"));
   Serial.println(F("G90; - absolute mode"));
   Serial.println(F("G91; - relative mode"));
-  Serial.println(F("G92 [X(steps)] [Y(steps)]; - change logical position"));
+  Serial.println(F("G92 [X(mm)] [Y(mm)]; - change logical position"));
   Serial.println(F("M18; - disable motors"));
   Serial.println(F("M100; - this help message"));
   Serial.println(F("M114; - report position and feedrate"));
+  Serial.println(F("M254; - run Arc scan"));
+  Serial.println(F("M255; - raster scan"));
   Serial.println(F("All commands must end with a newline."));
+  Serial.print("Maximum feedrate:");
+  Serial.println(MAX_FEEDRATE);
+  Serial.print("Minimum feedrate:");
+  Serial.println(MIN_FEEDRATE);
+  Serial.print("mm/step:");
+  Serial.println(MM_PER_STEP);
+  
+}
+
+
+void disable() {
+  xMotor.disable();
+  yMotor.disable();
 }
 
 
@@ -251,6 +322,7 @@ void help() {
  * Read the input buffer and find any recognized commands.  One G or M command per line.
  */
 void processCommand() {
+  
   int cmd = parsenumber('G',-1);
   switch(cmd) {
   case  0:
@@ -277,6 +349,8 @@ void processCommand() {
     position( parsenumber('X',0),
               parsenumber('Y',0) );
     break;
+  case 255:
+    help();
   default:  break;
   }
 
@@ -287,6 +361,8 @@ void processCommand() {
     break;
   case 100:  help();  break;
   case 114:  where();  break;
+  case 254:  runArc(); break;
+  case 255:  raster(); break;
   default:  break;
   }
 }
@@ -298,6 +374,8 @@ void processCommand() {
 void ready() {
   sofar=0;  // clear input buffer
   Serial.print(F(">"));  // signal ready to receive input
+  xMotor.enable();
+  yMotor.enable();
 }
 
 
@@ -306,11 +384,10 @@ void ready() {
  */
 void setup() {
   Serial.begin(BAUD);  // open coms
-
-  setup_controller();  
+  delay(5000);
+  //setup_controller();  
   position(0,0);  // set staring position
   feedrate((MAX_FEEDRATE + MIN_FEEDRATE)/2);  // set default speed
-
   help();  // say hello
   ready();
 }

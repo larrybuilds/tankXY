@@ -11,8 +11,8 @@
 
 #include <stdint.h>
 
-#define STEP_PREV_200	200
-#define STEP_PREV_400	400
+#define STEP_PREV_200	  200
+#define STEP_PREV_400	  400
 #define STEP_PREV_2000	2000
 #define STEP_PREV_5000  5000
 #define STEP_PREV_12800 12800
