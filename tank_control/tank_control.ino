@@ -263,7 +263,7 @@ void where() {
 
 void runArc() {
   // Set feedrate to 10mm/s
-  feedrate(30);
+  feedrate(10);
   // Run 0.9m diameter, 180deg arc clockwise
   arc(450,0,900,0,1);
   delay(500);
@@ -281,12 +281,31 @@ void raster() {
   line(0,0);
 }
 
+void square() {
+  delay(2000);
+  // Set feedrate to 10mm/s
+  feedrate(10);
+  // Move 0.7m towards the desk
+  line(700,0);
+  waiting();  
+  line(700,700);
+  waiting();
+  line(0,700);
+  waiting();
+  line(0,0);
+}
 
+void waiting() {
+  Serial.println ("Hit enter to continue");     // signal initalization done
+  while(Serial.available() == 0){
+  }
+}
+}
 /**
  * display helpful information
  */
 void help() {
-  Serial.print(F("Small Tank XY-Stage Control"));
+  Serial.print(F("Medium Tank XY-Stage Control"));
   Serial.println(F("Commands:"));
   Serial.println(F("G00 [X(mm)] [Y(mm)] [F(mm/s)]; - line"));
   Serial.println(F("G01 [X(mm)] [Y(mm)] [F(mm/s)]; - line"));
@@ -301,6 +320,7 @@ void help() {
   Serial.println(F("M114; - report position and feedrate"));
   Serial.println(F("M254; - run Arc scan"));
   Serial.println(F("M255; - raster scan"));
+  Serial.println(F("M256; - square scan"));
   Serial.println(F("All commands must end with a newline."));
   Serial.print("Maximum feedrate:");
   Serial.println(MAX_FEEDRATE);
@@ -310,7 +330,6 @@ void help() {
   Serial.println(MM_PER_STEP);
   
 }
-
 
 void disable() {
   xMotor.disable();
@@ -363,6 +382,7 @@ void processCommand() {
   case 114:  where();  break;
   case 254:  runArc(); break;
   case 255:  raster(); break;
+  case 256:  square(); break;
   default:  break;
   }
 }
